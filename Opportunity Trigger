@@ -1,0 +1,47 @@
+trigger OpportunityTrigger on Opportunity (Before insert,Before Update) {
+	
+    if(Trigger.isBefore){
+        if(Trigger.isUpdate){
+            if(OpportunityTriggerHandler.isTriggerRan == false){
+                OpportunityTriggerHandler.updateEmailId(Trigger.New,Trigger.oldMap);
+            }
+        }
+    }
+}
+
+
+public class OpportunityTriggerHandler {
+    //I have 1 account for that I have 5 related opportunities  1 opportunity is updated with email id then I want to update on the all the opportunity of that account
+     
+    public static Boolean isTriggerRan = false;
+    public static void updateEmailId(List<Opportunity> newOppList,Map<Id,Opportunity> oldOppMap){
+        
+        
+        Map<Id,String> accIdOppMailMap = new Map<Id,String>();
+        Set<Id> oppId = new Set<Id>();
+        for(Opportunity opp : newOppList){
+            if(opp.AccountId != null && opp.Email__c != oldOppMap.get(opp.Id).Email__c){
+                accIdOppMailMap.put(opp.AccountId,opp.Email__c);
+                oppId.add(opp.Id);
+            }
+        }
+        
+        List<Opportunity> oppToBeUpdated = new List<Opportunity>();
+        
+        for(Opportunity opp : [SELECT AccountId,Id,Email__c FROM Opportunity WHERE AccountId IN :accIdOppMailMap.keySet() AND Id NOT IN :oppId]){
+            opp.Email__c = accIdOppMailMap.get(opp.AccountId);
+            
+            oppToBeUpdated.add(opp);
+        }
+        isTriggerRan = true;
+        update oppToBeUpdated;
+        isTriggerRan = false;
+    }
+    
+    
+    
+    //Write trigger where Opportunity have Amount so the maximum Amount Opportunity Name should be visible on Account?
+    
+    
+    
+}
