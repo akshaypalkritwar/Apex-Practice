@@ -1,1 +1,166 @@
+trigger AccountTrigger on Account (Before Update,Before Delete,After Insert,After update) {
+    if(Trigger.isBefore){
+        if(Trigger.isUpdate){
+            //AccountTriggerHandler.preventStatus(Trigger.new,Trigger.oldMap);
+        }
+        if(Trigger.isDelete){
+            //AccountTriggerHandler.preventAccountDeletion(null,trigger.old);
+        }
+    }
+    if(Trigger.isAfter){
+        if(Trigger.isInsert){
+            //AccountTriggerHandler.createContact(Trigger.new);
+        }
+        if(Trigger.isUpdate){
+            //AccountTriggerHandler.updateContactMail(Trigger.new,Trigger.oldMap);
+            //AccountTriggerHandler.updateContactDiscription(Trigger.new,Trigger.oldMap);
+            //AccountTriggerHandler.deleteContact(Trigger.new,Trigger.oldMap);
+        }
+        
+        
+    }
+}
 
+
+
+
+
+
+public class AccountTriggerHandler {
+//Write a trigger so when account’s email will update related contacts email also should update
+
+    public static void updateContactMail(List<Account> newAccountList,Map<Id,Account> oldAccountMap){
+        
+        Map<Id,Account> accountIdMailMap = new Map<Id,Account>();
+        
+        for(Account acc : newAccountList){
+            if(acc.Email__c != oldAccountMap.get(acc.Id).Email__c){
+                accountIdMailMap.put(acc.Id,acc);
+            }
+        }
+        
+        if(accountIdMailMap.isEmpty()){
+            return;
+        }
+        
+        List<Contact> conToUpdate = new List<Contact>();
+        for(Contact con : [SELECT Id,Email,AccountId FROM Contact WHERE AccountId IN :accountIdMailMap.keySet()]){
+         	Account acc = accountIdMailMap.get(con.AccountId);
+            con.Email = acc.Email__c;
+            conToUpdate.add(con);
+        }
+        
+        if(!conToUpdate.isEmpty()){
+            update conToUpdate;
+        }
+    }
+//Whenever the user name is update then description of contact should modified with modified user name in description field.
+    public static void updateContactDiscription(List<Account> newAccountList , Map<Id,Account> oldAccountMap){
+        Map<Id,Account> accountNameMap =  new Map<Id,Account>();
+        
+        for(Account acc : newAccountList){
+            if(acc.Name != oldAccountMap.get(acc.Id).Name){
+                accountNameMap.put(acc.Id,acc);
+            }
+        }
+        
+        if(accountNameMap.isEmpty()){
+            return;
+        }
+        List<Contact> conToUpdate = new List<Contact>();
+        
+        for(Contact con : [SELECT Id,Description,AccountId FROM Contact WHERE AccountId IN :accountNameMap.keySet()]){
+            Account acc = accountNameMap.get(con.AccountId);
+            con.Description = acc.Name;
+            conToUpdate.add(con);
+        }
+        
+        if(!conToUpdate.isEmpty()){
+            update conToUpdate;
+        }
+    }
+    
+//Trigger on Account Object When Account is created - Create the Related Contacts
+    public static void createContact(List<Account> newAccountList){
+        List<Contact> conToBeUpdated = new List<Contact>();
+        for(Account acc : newAccountList){
+            Contact con = new Contact();
+            con.AccountId = acc.Id;
+            con.LastName = acc.Name;
+            conToBeUpdated.add(con);
+        }
+        if(!conToBeUpdated.isEmpty()){
+            insert conToBeUpdated;
+        }
+    }
+// When Account 'Type' is updated to 'nstallation Partner' Delete the related Contacts
+    public static void deleteContact(List<Account> newAccountList,Map<Id,Account> oldAccountMap){
+        
+        Map<Id,Account> accountMap = new Map<Id,Account>();
+        for(Account acc : newAccountList){
+            if(acc.Type != oldAccountMap.get(acc.Id).Type && acc.Type == 'Installation Partner'){
+                accountMap.put(acc.Id,acc);
+            }
+        }
+        
+        if(accountMap.isEmpty()){
+            return;
+        }
+        
+        List<Contact> conToBeDeleted = new List<Contact>();
+        for(Contact con : [SELECT Id,AccountId FROM Contact WHERE AccountId IN :accountMap.keySet()]){
+            conToBeDeleted.add(con);
+        }
+        
+        if(!conToBeDeleted.isEmpty()){
+            delete conToBeDeleted;
+        }
+    }
+    
+    // Please write a Trigger to Validate Following Scenario: IF user is changing Account.Status__c value from “Active” to “Not Active” 
+    //then do not allow users to change the Value to “Not Active” incase there is any Prospecting Opportunity associated with Account.
+    
+    public static void preventStatus(List<Account> newAccountList,Map<Id,Account> oldAccountMap){
+        
+        Map<Id,Account> accIdMap = new Map<Id,Account>();
+        
+        for(Account acc : newAccountList){
+            if(acc.Status__c == 'Not Active' && oldAccountMap.get(acc.Id).Status__c == 'Active'){
+                accIdMap.put(acc.Id,acc);
+            }
+        }
+        
+        List<Opportunity> oppList = [SELECT AccountId,Id,StageName FROM Opportunity WHERE AccountId IN :accIdMap.keySet()];
+        
+        if(oppList.size()>0){
+            for(Opportunity opp : oppList){
+                if(opp.StageName == 'Prospecting'){
+                    
+                    Account acc = accIdMap.get(opp.AccountId);
+                   
+                    
+                    acc.addError('account cannot be deactivated because there is a prospecting opportunity present');
+                }
+            }
+            
+        }
+    }
+    
+    //Write a Trigger On Account, Account have more then 2 contact this account can not be delete
+    public static void preventAccountDeletion(List<Account> newAccountList,List<Account> oldAccList){
+        
+        Set<Id> accIds = new Set<Id>();
+        for(Account acc : oldAccList){
+            accIds.add(acc.Id);
+        }
+        
+        for(Account acc : [SELECT Id,(SELECT Id FROM Contacts) FROM Account WHERE Id IN :accIds]){
+            if(acc.Contacts.size() > 2){
+                System.debug('You canot delete this account as it have more than 2 associate contacts');
+                acc.addError('You canot delete this account as it have more than 2 associate contacts');
+                
+            }
+        }
+    }
+    
+}
